@@ -1,13 +1,18 @@
 const collection = require('../collection/authcollection')
 const jwt = require('jsonwebtoken')
-const cookieParser = require('cookie-parser')
 const bcrypt = require('bcrypt')
 const nodemailer = require("nodemailer");
+const path = require('path');
+const ejs = require('ejs')
+const fs = require('fs').promises;
+require('dotenv').config();
 
 
+var userEmail = ''
 
-async function hashPassword(password){
-  const res = await bcrypt.hash(password,10)
+
+async function hashPassword(password) {
+  const res = await bcrypt.hash(password, 10)
   return res
 }
 
@@ -17,46 +22,73 @@ async function compare(userPassword, hashPassword) {
 }
 
 
-module.exports.signup_get = (req, res) => {
-    res.render('signup');
-  }
-  
+module.exports.home = (req, res) => {
+ console.log(req.query.email)
+  res.render("home", { email: req.query.email });
+}
 
-  module.exports.signup_post = async (req, res) => {
-    console.log('Signup initiated');
-    try {
-      const check = await collection.findOne({ email: req.body.email });
-  
-      if (check) {
-        console.log('User already exists');
-        res.send("User already exists");
-      } else {
-        const token = jwt.sign({ email: req.body.email }, "thisisajwttoken", { expiresIn: '1h' });
-        const userData = {
-          email: req.body.email,
-          password: await hashPassword(req.body.password),
-          token: token,
-        };
-  
-        await collection.insertMany([userData]);
-  
-        // Send a welcome email to the newly registered user
-        await sendWelcomeEmail(req.body.email, req.body.email, req.body.password);
-  
-        console.log('User successfully signed up:', userData);
-        res.render("home", { email: req.body.email });
-      }
-    } catch (error) {
-      console.error('Error during signup:', error);
-      res.status(500).send("Internal Server Error");
-    }
-  };
+
 module.exports.login_get = (req, res) => {
-    res.render('login');
+  res.render('login');
+ };
+
+
+ module.exports.signup_get= (req, res) => {
+  res.render('signup');
+ };
+ 
+ module.exports.logout_get = (req, res) => {
+  console.log('Logout initiated');
+  res.clearCookie('jwt');
+  res.redirect('/login');
+};
+
+module.exports.reset_get = async (req, res) => {
+  console.log('userEmail',userEmail)
+  await sendResetPassword(userEmail);
+  res.send("Check your Email ");
+};
+
+module.exports.resetPassword_get = (req,res) => {
+  res.render('resetPassword')
+}
+
+
+module.exports.signup_post = async (req, res) => {
+  console.log('Signup initiated');
+  try {
+    const check = await collection.findOne({ email: req.body.email });
+
+    if (check) {
+      console.log('User already exists');
+      res.send("User already exists");
+    } else {
+      const jwtSecret = process.env.JWT_SECRET || 'defaultSecret'; 
+      const token = jwt.sign({ email: req.body.email }, jwtSecret, { expiresIn: '1h' });
+      const userData = {
+        email: req.body.email,
+        password: await hashPassword(req.body.password),
+        token: token,
+      };
+      await collection.insertMany([userData]);
+
+      res.locals.email = req.body.email;
+
+      console.log('User successfully signed up:', userData);
+      // res.render("home", { email: req.body.email });
+      res.redirect(`/home?email=${req.body.email}`);
+    }
+  } catch (error) {
+    console.error('Error during signup:', error);
+    res.status(500).send("Internal Server Error");
+  }
 };
 
 
+
 module.exports.login_post = async (req, res) => {
+  userEmail = req.body.email
+  console.log('userEmailss',userEmail)
   console.log('Login initiated');
   try {
     const check = await collection.findOne({ email: req.body.email });
@@ -75,7 +107,9 @@ module.exports.login_post = async (req, res) => {
           maxAge: 600000,
           httpOnly: true,
         });
-        res.render("home", { email: req.body.email });
+        //  res.render("home", { email: req.body.email });
+        res.redirect(`/home?email=${req.body.email}`);
+
       } else {
         console.log('User token not found');
         res.send("User token not found");
@@ -91,56 +125,47 @@ module.exports.login_post = async (req, res) => {
 };
 
 
-module.exports.logout_get = (req, res) => {
-  console.log('Logout initiated');
-  res.clearCookie('jwt'); 
-  res.redirect('/login');
-};
-
-module.exports.resetPassword_get = (req,res) => {
-  res.render('resetPassword')
-}
-
 
 module.exports.resetPassword_post = async (req, res) => {
-    try {
-        const user = await collection.findOne({ email: req.body.email });
+  try {
+    const user = await collection.findOne({ email: req.body.email });
 
-        if (!user) {
-            console.log('User not found');
-            return res.send("User not found");
-        }
-
-        // Verify old password
-        const isOldPasswordValid = await compare(req.body.oldPassword, user.password);
-
-        if (!isOldPasswordValid) {
-            console.log('Old password is incorrect');
-            return res.send("Old password is incorrect");
-        }
-
-        // Check if the new password and confirm password match
-        if (req.body.newPassword !== req.body.confirmPassword) {
-            console.log('New password and confirm password do not match');
-            return res.send("New password and confirm password do not match");
-        }
-
-        // Update the password in the database
-        const hashedNewPassword = await hashPassword(req.body.newPassword);
-        await collection.updateOne({ email: req.body.email }, { $set: { password: hashedNewPassword } });
-
-        console.log('Password reset successfully');
-        res.render("login");
-    } catch (error) {
-        console.error('Error during password reset:', error);
-        res.status(500).send("Internal Server Error");
+    if (!user) {
+      console.log('User not found');
+      return res.send("User not found");
     }
+
+    // Verify old password
+    const isOldPasswordValid = await compare(req.body.oldPassword, user.password);
+
+    if (!isOldPasswordValid) {
+      console.log('Old password is incorrect');
+      return res.send("Old password is incorrect");
+    }
+
+    // Check if the new password and confirm password match
+    if (req.body.newPassword !== req.body.confirmPassword) {
+      return res.send("New password and confirm password do not match");
+    }
+
+    // Update the password in the database
+    const hashedNewPassword = await hashPassword(req.body.newPassword);
+    await collection.updateOne({ email: req.body.email }, { $set: { password: hashedNewPassword } });
+
+    console.log('Password reset successfully');
+    res.render("login");
+  } catch (error) {
+    console.error('Error during password reset:', error);
+    res.status(500).send("Internal Server Error");
+  }
 };
 
 
-async function sendWelcomeEmail(userEmail) {
+async function sendResetPassword(userEmail) {
+  const templateFile = 'view/reset.ejs';
   try {
     const transporter = nodemailer.createTransport({
+
       service: "gmail",
       host: "smtp.gmail.com",
       port: 465,
@@ -152,18 +177,26 @@ async function sendWelcomeEmail(userEmail) {
       timeout: 3000,
     });
 
-    const info = await transporter.sendMail({
+
+
+    const template = await fs.readFile(templateFile, 'utf-8');
+    const compiledTemplate = ejs.compile(template);
+    const html = compiledTemplate({ username: 'John Doe', balance: 1000 });
+
+    const mailOptions = {
       from: 'shalinisree@twilightsoftwares.com',
       to: userEmail,
-      subject: 'Welcome to Your App',
-      text: 'Thank you for signing up!',
-      html: '<p>Welcome Have a nice day !</p>',
-    });
+      subject: 'Reset Your Password',
+      html: html,
+    };
 
-    console.log(`Welcome email sent to ${userEmail}: ${info.messageId}`);
-    
+    // Send the email
+    const info = await transporter.sendMail(mailOptions);
+
+    console.log('Email sent:', info.messageId);
+
   } catch (error) {
-    console.error(`Error sending welcome email to ${userEmail}: ${error.message}`);
+    console.error('Error sending email:', error);
   }
 }
 

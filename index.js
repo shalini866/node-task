@@ -4,6 +4,7 @@ const Collection = require('./collection/authcollection')
 const authRoutes = require('./routes/authRoutes')
 const path = require('path');
 const cookieParser = require('cookie-parser');
+require('dotenv').config();
 
 const app = express();
 
@@ -27,18 +28,18 @@ app.use(express.urlencoded({ extended: false }));
 
 app.use(authRoutes)
 
-app.listen(3000, () => {
-  console.log('Server is listening on port 3000');
+const port = process.env.PORT || 3000; 
+app.listen(port, () => {
+  console.log(`Server is listening on port ${port}`);
 });
 
 
 
-mongoose.connect("mongodb+srv://admin:smartwork123@cluster0.zq3u635.mongodb.net/Node-Crud?retryWrites=true&w=majority")
-.then(()=>{
-    console.log("Database connected")
-})
-.catch(()=>{
-    console.log("error")
-})
-
-app.use(Collection)
+mongoose.connect(process.env.MONGOOSE_CONNECT)
+    .then(() => {
+        console.log("Database connected");
+        app.use(Collection); 
+    })
+    .catch((error) => {
+        console.error("Error connecting to the database:", error);
+    });
