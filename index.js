@@ -9,15 +9,15 @@ require('dotenv').config();
 const app = express();
 
 const viewPaths = path.join(__dirname, 'view'); 
-// const publicPaths = path.join(__dirname, 'public');
+
 
 app.set('views', viewPaths); 
-// app.use(express.static(publicPaths))
+
 app.use(express.static('public'));
 
 
 
-// app.set('views', path.join(__dirname, 'view'))
+
 app.set('view engine', 'ejs')
 
 

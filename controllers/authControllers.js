@@ -2,7 +2,6 @@ const collection = require('../collection/authcollection')
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcrypt')
 const nodemailer = require("nodemailer");
-const path = require('path');
 const ejs = require('ejs')
 const fs = require('fs').promises;
 require('dotenv').config();
@@ -88,7 +87,6 @@ module.exports.signup_post = async (req, res) => {
 
 module.exports.login_post = async (req, res) => {
   userEmail = req.body.email
-  console.log('userEmailss',userEmail)
   console.log('Login initiated');
   try {
     const check = await collection.findOne({ email: req.body.email });
